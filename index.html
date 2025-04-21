@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>毕业袍领取查询系统@HKBUCSSA</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: "Microsoft YaHei", sans-serif;
+      background-color: #f7f9fc;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background-color: #002d72;
+      color: white;
+      padding: 1rem 2rem;
+      font-size: 1.5rem;
+    }
+    .container {
+      margin: 3rem auto;
+      padding: 2rem;
+      max-width: 600px;
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    label, input, button {
+      display: block;
+      width: 100%;
+      margin-bottom: 1rem;
+      font-size: 1.1rem;
+    }
+    button {
+      background-color: #002d72;
+      color: white;
+      border: none;
+      padding: 0.5rem;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #001a47;
+    }
+    .info {
+      background: #e6f0ff;
+      padding: 1rem;
+      border-radius: 8px;
+      display: none;
+    }
+    .info p {
+      margin: 0.5rem 0;
+    }
+    .warning {
+      color: red;
+      font-weight: bold;
+    }
+    .record-section {
+      margin-top: 2rem;
+      background-color: #fffbe0;
+      padding: 1rem;
+      border-radius: 8px;
+    }
+    .record-section li button {
+      float: right;
+      background-color: crimson;
+      margin-left: 1rem;
+      font-size: 0.9rem;
+      padding: 0.2rem 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <header>CSSA毕业袍领取查询</header>
+  <div class="container">
+    <label for="excelFile">上传 Excel 文件：</label>
+    <input type="file" id="excelFile" accept=".xlsx">
+
+    <label for="studentId">请输入学号：</label>
+    <input type="text" id="studentId" placeholder="例如：24471690">
+    <button onclick="searchStudent()">查询</button>
+
+    <div id="result" class="info"></div>
+    <button id="markReceivedBtn" style="display:none" onclick="markAsReceived()">标记为已领取</button>
+    <button id="cancelReceivedBtn" style="display:none; background-color:crimson;" onclick="cancelReceived(currentId)">取消标记领取</button>
+
+    <div class="record-section">
+      <h3>🎓 已领取名单</h3>
+      <ul id="receivedList"></ul>
+    </div>
+  </div>
+
+  <script>
+    let studentData = {};
+    let currentId = null;
+
+    document.getElementById('excelFile').addEventListener('change', function(e) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        studentData = {};
+        json.forEach(row => {
+          if (row['学号']) {
+            const key = String(row['学号']).trim();
+            studentData[key] = {
+              名字: row['名字'],
+              学院: row['学院'],
+              专业: row['专业'],
+              学位: row['学位'],
+              尺码: row['尺码'],
+              颜色: row['颜色']
+            }
+          }
+        });
+        alert('数据加载成功，共有 ' + Object.keys(studentData).length + ' 位同学');
+        updateReceivedList();
+      };
+      reader.readAsArrayBuffer(e.target.files[0]);
+    });
+
+    function searchStudent() {
+      const id = document.getElementById('studentId').value.trim();
+      const resultDiv = document.getElementById('result');
+      currentId = id;
+      const receivedList = JSON.parse(localStorage.getItem('received') || '[]');
+
+      if (studentData[id]) {
+        const data = studentData[id];
+        let infoHTML = `
+          <p><strong>名字：</strong> ${data.名字}</p>
+          <p><strong>学院：</strong> ${data.学院}</p>
+          <p><strong>专业：</strong> ${data.专业}</p>
+          <p><strong>学号：</strong> ${id}</p>
+          <p><strong>学位：</strong> ${data.学位}</p>
+          <p><strong>尺码：</strong> ${data.尺码}</p>
+          <p><strong>颜色：</strong> ${data.颜色}</p>
+        `;
+        if (receivedList.includes(id)) {
+          infoHTML += `<p class='warning'>⚠️ 此学号已领取毕业袍</p>`;
+          document.getElementById('cancelReceivedBtn').style.display = 'block';
+        } else {
+          document.getElementById('cancelReceivedBtn').style.display = 'none';
+        }
+        resultDiv.innerHTML = infoHTML;
+        resultDiv.style.display = 'block';
+        document.getElementById('markReceivedBtn').style.display = 'block';
+      } else {
+        resultDiv.innerHTML = `<p style="color:red;">未找到该学号对应的信息。</p>`;
+        resultDiv.style.display = 'block';
+        document.getElementById('markReceivedBtn').style.display = 'none';
+        document.getElementById('cancelReceivedBtn').style.display = 'none';
+      }
+    }
+
+    function markAsReceived() {
+      if (!currentId) return;
+      let receivedList = JSON.parse(localStorage.getItem('received') || '[]');
+      if (!receivedList.includes(currentId)) {
+        receivedList.push(currentId);
+        localStorage.setItem('received', JSON.stringify(receivedList));
+        alert('✅ 已记录该同学为已领取');
+        searchStudent();
+        updateReceivedList();
+      }
+    }
+
+    function cancelReceived(id) {
+      let receivedList = JSON.parse(localStorage.getItem('received') || '[]');
+      receivedList = receivedList.filter(item => item !== id);
+      localStorage.setItem('received', JSON.stringify(receivedList));
+      updateReceivedList();
+      if (currentId === id) searchStudent();
+    }
+
+    function updateReceivedList() {
+      const ul = document.getElementById('receivedList');
+      ul.innerHTML = '';
+      const receivedList = JSON.parse(localStorage.getItem('received') || '[]');
+      receivedList.forEach(id => {
+        const li = document.createElement('li');
+        li.innerHTML = `${id} ${(studentData[id] ? ` - ${studentData[id].名字}` : '')} <button onclick="cancelReceived('${id}')">取消</button>`;
+        ul.appendChild(li);
+      });
+    }
+
+    updateReceivedList();
+  </script>
+</body>
+</html>
+
